@@ -1,0 +1,5 @@
+# Site settings
+title: CarND MPC Project
+
+# Build settings
+markdown: kramdown
