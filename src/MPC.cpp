@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 5;
-double dt = 1;
+size_t N = 15;
+double dt = .1;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -23,7 +23,7 @@ const double Lf = 2.67;
 
 // NOTE: feel free to play around with this
 // or do something completely different
-double ref_v = 5;
+double ref_v = 30;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -50,30 +50,28 @@ class FG_eval {
     fg[0] = 0;
 
     // Reference State Cost
-    // TODO: Define the cost related the reference state and
+    // Define the cost related the reference state and
     // any anything you think may be beneficial.
     for (size_t t = 0; t < N; t++) {
       AD<double> v = vars[v_start + t];
       AD<double> cte = vars[cte_start + t];
       AD<double> epsi = vars[epsi_start + t]; 
 	  // minimize error
-	  fg[0] += 100*CppAD::pow( cte, 2 );
-	  //fg[0] += CppAD::pow( epsi, 2 );
+	  fg[0] += CppAD::pow( cte, 2 );
+	  fg[0] += CppAD::pow( epsi, 2 );
 	  // velocity bounds
-	  fg[0] += CppAD::LeqZero(v)*CppAD::pow(v,2);
-	  fg[0] += CppAD::LeqZero(v-ref_v) * CppAD::pow(v-ref_v,2);
+      fg[0] += 0.01*CppAD::pow(v-ref_v, 2);
 	}
-#if 0
 	// smooth accelearation, delta (N-1 actuations)
 	for (size_t t = 1; t < N-1; t++) {
 		AD<double> delta0 = vars[delta_start + t - 1]; 
 		AD<double> delta1 = vars[delta_start + t]; 
 		AD<double> a0 = vars[a_start + t - 1]; 
 		AD<double> a1 = vars[a_start + t]; 
-		fg[0] += CppAD::pow(delta1 - delta0, 2);
-		fg[0] += CppAD::pow(a1 - a0, 2);
+        // if vehicle is behaving erratically, increase cost of change in control
+		fg[0] += 200*CppAD::pow(delta1 - delta0, 2);
+		fg[0] += 100*CppAD::pow(a1 - a0, 2);
 	}
-#endif
 
     //
     // Setup Constraints
@@ -248,6 +246,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
+#if 0
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
   std::cout << "solution ";
@@ -257,6 +256,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
       std::cout << solution.x[i] <<" ";
   }
   std::cout << std::endl;
+#endif
 
   // return trajectory too
   return {solution.x[x_start + 1],   solution.x[y_start + 1],
