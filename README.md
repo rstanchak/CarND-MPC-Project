@@ -13,46 +13,54 @@ Date: Sept, 17 2017
 
 ## The Model
 
-*Student describes their model in detail. This includes the state, actuators and update equations.*
+*REQUIREMENT: Student describes their model in detail. This includes the state, actuators and update equations.*
 
 The model is a straightforward port of the MPC quiz.
 
 The state consists of
 
-- x - the x position in vehicle coordinates
-- y - the y position in vehicle coordinates
-- psi - the orientation in vehicle coordinates
-- v - the velocity in the direction of the orientation
-- cte - the cross-track error
-- epsi - the orientation error 
+ - x - the x position in vehicle coordinates
+ - y - the y position in vehicle coordinates
+ - psi - the orientation in vehicle coordinates
+ - v - the velocity in the direction of the orientation
+ - cte - the cross-track error
+ - epsi - the orientation error 
 
 The acutators consist of
 
-- a - throttle control value in the interval [-1, 1]
-- delta - steering control in the interval [-1, 1]
+ - a - throttle control value in the interval [-1, 1]
+ - delta - steering control in the interval [-1, 1]
 
 The update equations are as follows:
 
-- x
+ - x1    = x0 + v0 * cos(psi0) * dt
+ - y1    = y0 + v0 * sin(psi0) * dt
+ - psi1  = psi0 + v0/Lf * delta0 * dt
+ - v1    = v0 + a0 * dt
+ - cte1  = cte0 + v0 * sin(epsi0) * dt
+ - epsi1 = epsi0 + v0 * delta0 / Lf * dt
+
+The cost function is described below
 
 ## Timestep Length and Elapsed Duration (N & dt)
 
-*Student discusses the reasoning behind the chosen N (timestep length) and dt (elapsed duration between timesteps) values. Additionally the student details the previous values tried.*
+*REQUIREMENT: Student discusses the reasoning behind the chosen N (timestep length) and dt (elapsed duration between timesteps) values. Additionally the student details the previous values tried.*
 
-The lecture slides suggested minimizing dt and maximizing N as practical.  I chose dt=100ms to match the actuator latency. I'm not sure if this 
+The lecture slides suggested minimizing dt and maximizing N as practical.  I chose dt=100ms to match the actuator latency for reasons discussed below. N=15 provided a good balance between computation speed and reasonably long time horizon.
 
 ## Polynomial Fitting and MPC Preprocessing
 
-*A polynomial is fitted to waypoints. If the student preprocesses waypoints, the vehicle state, and/or actuators prior to the MPC procedure it is described.*
+*REQUIREMENT: A polynomial is fitted to waypoints. If the student preprocesses waypoints, the vehicle state, and/or actuators prior to the MPC procedure it is described.*
 
 The waypoints are transformed to vehicle coordinates, and they are subsequently fit to a 3rd degree polynomial f.  The waypoints are transformed in order to simplify computation of cte and epsi.  In vehicle coordinates, x, y, psi are zero, so the cte and epsi computations have the same form as the straight-line model:
 
-- cte = y-f(x)
-- epsi = 
+- cte = f(x) - y
+- epsi = psi - psi_des, where psi_des is the tangent line of the curve f at x.  i.e. psi_des = tan(f'(x))
 
 ## Model Predictive Control with Latency
 
-*The student implements Model Predictive Control that handles a 100 millisecond latency. Student provides details on how they deal with latency.* 
+*REQUIREMENT: The student implements Model Predictive Control that handles a 100 millisecond latency. Student provides details on how they deal with latency.* 
+
 The implementation deals with latency as follows:
 
 1. Cost function prioritizes smooth actuator controls -- this has the effect of averaging change in control through time, so control changes will be smaller for each time step.   A smaller change in control means the error introduced by delaying that control is less than what it would be if the magnitude of the control was larger.

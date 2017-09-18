@@ -3,3 +3,5 @@ title: CarND MPC Project
 
 # Build settings
 markdown: kramdown
+
+theme: jekyll-theme-cayman
