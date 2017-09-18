@@ -30,6 +30,7 @@ add_executable(mpc ${sources})
 target_link_libraries(mpc ipopt z ssl uv uWS)
 
 if(${MYBUILD})
+    add_definitions(-DCONFIG_UWS13_COMPAT)
     add_definitions(-DCONFIG_MYBUILD)
     target_link_libraries(mpc ssl)
 endif()
