@@ -1,5 +1,4 @@
 #include <math.h>
-#include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -8,12 +7,8 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "json.hpp"
+#include "uws-compat.h"
 
-#ifdef CONFIG_MYBUILD
-typedef uWS::WebSocket<uWS::SERVER> * WsServer;
-#else
-typedef uWS::WebSocket<uWS::SERVER> WsServer;
-#endif
 
 // for convenience
 using json = nlohmann::json;
@@ -106,7 +101,7 @@ int main() {
   // MPC is initialized here!
   MPC mpc;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> * ws, char *data, size_t length,
+  h.onMessage(UWS_ON_MESSAGE([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -115,8 +110,8 @@ int main() {
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
-        std::cout << "---------------------------------------------------------" << std::endl;
-        std::cout << s << std::endl;
+        //std::cout << "---------------------------------------------------------" << std::endl;
+        //std::cout << s << std::endl;
         auto j = json::parse(s);
         string event = j[0].get<string>();
         if (event == "telemetry") {
@@ -128,28 +123,28 @@ int main() {
           double psi = normalize_angle(j[1]["psi"]);
           double v = j[1]["speed"];
 
+          MapToVehicleTransform map2vehicle(px, py, psi);
+          map2vehicle(px, py, px, py);
+          psi = 0;
+
           Eigen::VectorXd xvals(ptsx.size()), yvals(ptsy.size());
           for(size_t i=0; i<ptsx.size(); ++i) {
-              xvals[i] = ptsx[i];
-              yvals[i] = ptsy[i];
+              map2vehicle(ptsx[i], ptsy[i], xvals[i], yvals[i]);
           }
 
 		  Eigen::VectorXd coeffs = polyfit(xvals, yvals, 3);
 		  Eigen::VectorXd dcoeffs(3);
           dcoeffs << coeffs[1], 2*coeffs[2], 3*coeffs[3];
 
-          double cte =  py - polyeval(coeffs, px);
+          double cte =  polyeval(coeffs, px) - py;
           // \psi_des_t can be calculated as the tangential angle of the polynomial f evaluated at x_t
           // arctan(f'(x_t))
           // f'(x_t) = 3*coeffs[3]*x^2 + 2*coeffs[2]*x + coefs[1]
-          // well this is a mess.  Not sure how to get proper direction with this.
-          // double psi_des = atan2(polyeval(dcoeffs,px), 1.);
-          // instead, approximate psi_des by fitting a line between the first two waypoints
-          double psi_des = atan2( ptsy[1]-ptsy[0], ptsx[1]-ptsx[0]);
+          double psi_des = atan2(polyeval(dcoeffs,px), 1.);
           double epsi = normalize_angle(psi - psi_des);
-          std::cout<<"psi: "<<psi<<"\tpsi_des:"<<psi_des<<"\tepsi:" << epsi;
-          std::cout<<"\tx,y: "<<px<<","<<py<<"\tf(x)="<<polyeval(coeffs, px)<<"\tcte: "<<cte;
-          std::cout<<"\tv: "<<v<<std::endl;
+          //std::cout<<"psi: "<<psi<<"\tpsi_des:"<<psi_des<<"\tepsi:" << epsi;
+          //std::cout<<"\tx,y: "<<px<<","<<py<<"\tf(x)="<<polyeval(coeffs, px)<<"\tcte: "<<cte;
+          //std::cout<<"\tv: "<<v<<std::endl;
 
           Eigen::VectorXd state(6);
           state << px, py, psi, v, cte, epsi;
@@ -167,7 +162,10 @@ int main() {
           */
           double steer_value = -solution[6];///deg2rad(25);
           double throttle_value = solution[7];
-          std::cout<<"steer:"<<steer_value<<"\tthrottle:"<<throttle_value<<std::endl;
+          std::cout<<"cte: "<<cte
+              <<"\tepsi: "<<epsi
+              <<"\tsteer:"<<steer_value
+              <<"\tthrottle:"<<throttle_value<<std::endl;
           
 
           json msgJson;
@@ -180,13 +178,12 @@ int main() {
           vector<double> mpc_x_vals ;
           vector<double> mpc_y_vals;
 
-          MapToVehicleTransform map2vehicle(px, py, psi);
 
           mpc_x_vals.push_back(0);
           mpc_y_vals.push_back(0);
           {
-              double x,y;
-              map2vehicle(solution[0], solution[1], x, y);
+              double x = solution[0], y = solution[1];
+              //map2vehicle(solution[0], solution[1], x, y);
               mpc_x_vals.push_back(x);
               mpc_y_vals.push_back(y);
           }
@@ -204,17 +201,18 @@ int main() {
           // the points in the simulator are connected by a Yellow line
           for(size_t i=0; i<ptsx.size(); ++i)
           {
-              double x, y;
-              map2vehicle(ptsx[i], ptsy[i], x, y);
-              next_x_vals.push_back(x);
-              next_y_vals.push_back(y);
+              //double x = i*10;
+              //map2vehicle(ptsx[i], ptsy[i], x, y);
+              next_x_vals.push_back(xvals[i]);
+              next_y_vals.push_back(yvals[i]);
+              //next_y_vals.push_back(polyeval(coeffs, x));
           }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
@@ -225,15 +223,15 @@ int main() {
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
           this_thread::sleep_for(chrono::milliseconds(100));
-          ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
-        ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+        ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
     }
-  });
+  }));
 
 #if 0
   // We don't need this since we're not using HTTP but if it's removed the
@@ -251,15 +249,15 @@ int main() {
   });
 
 #endif
-  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
+  h.onConnection(UWS_ON_CONNECTION([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
-  });
+  }));
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> * ws, int code,
+  h.onDisconnection(UWS_ON_DISCONNECTION([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
-    ws->close();
+    ws.close();
     std::cout << "Disconnected" << std::endl;
-  });
+  }));
 
   int port = 4567;
   if (h.listen(port)) {
